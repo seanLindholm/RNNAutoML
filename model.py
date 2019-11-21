@@ -56,14 +56,35 @@ class Dataset(utils.data.Dataset):
 
 
 class Trainer():
-    def __init__(datasize):
+    def __init__(datasize,arch_str):
         self.datasize = datasize
         self.criterion = F.cross_entropy()
 
-    def generateData():
+    def generateData(self,p_val = 0.2):
         X, y = make_moons(n_samples=self.datasize,noise=0.2)
-        
-        #define train 80, val 10 and test 10 set from the data 
+        val = int(len(X)*(1-p_val))
+        set_train = Dataset(X[:val],y[:val])
+        set_test = Dataset(X[val:],y[val:])
+        self.dl_train = utils.data.Dataloader(set_train, batch_size = 32, shuffle=True)
+        self.dl_test = utils.data.Dataloader(set_test, batch_size = 32, shuffle=True)
+
+
+
+    def loss(self,pred,target):
+        pass
+
+    def train(self):
+        self.generateData()
+        epcohs = 50
+
+        loss_train = []
+        for i,data in enumerate(iter(self.dl_train),0):
+            X,y = data
+            pred = self.net.forward()
+
+
+
+        #define train 80, val 20 and test 0 set from the data 
         
         # DataLoader(dataset, batch_size=1, shuffle=False, sampler=None,
         #   batch_sampler=None, num_workers=0, collate_fn=None,
