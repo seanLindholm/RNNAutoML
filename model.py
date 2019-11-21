@@ -2,6 +2,7 @@ from sklearn.datasets import make_moons
 import torch
 from torch import nn, optim, utils
 import torch.nn.functional as F
+from torch.utils import data
 
 test = True
 
@@ -19,7 +20,6 @@ class Net(nn.Module):
             'Sigmoid':nn.Sigmoid(),
         }
         
-        self.optimizer = optim.Adam(self.paramters(),lr=0.001)
 
         num_input = self.in_features
         
@@ -39,11 +39,13 @@ class Net(nn.Module):
         self.layers.append(nn.Softmax(dim=0))
         self.net = nn.Sequential(*self.layers)
         #print('layers', layers)
+        self.optimizer = optim.Adam(self.parameters(),lr=0.001)
+
 
     def forward(self,x):
         return self.net(x)
 
-class Dataset(utils.data.Dataset):
+class Dataset(data.Dataset):
     def __init__(self, X, y):
         self.X = torch.Tensor(X)
         self.y = torch.Tensor(y)
@@ -56,31 +58,34 @@ class Dataset(utils.data.Dataset):
 
 
 class Trainer():
-    def __init__(datasize,arch_str):
+    def __init__(self,datasize,arch_str):
         self.datasize = datasize
-        self.criterion = F.cross_entropy()
-
+        self.arch_str = arch_str
+        self.net = Net(arch_str)
     def generateData(self,p_val = 0.2):
         X, y = make_moons(n_samples=self.datasize,noise=0.2)
         val = int(len(X)*(1-p_val))
         set_train = Dataset(X[:val],y[:val])
         set_test = Dataset(X[val:],y[val:])
-        self.dl_train = utils.data.Dataloader(set_train, batch_size = 32, shuffle=True)
-        self.dl_test = utils.data.Dataloader(set_test, batch_size = 32, shuffle=True)
+        self.dl_train = data.DataLoader(set_train, batch_size = 32, shuffle=True)
+        self.dl_test = data.DataLoader(set_test, batch_size = 32, shuffle=True)
 
-
-
-    def loss(self,pred,target):
-        pass
 
     def train(self):
         self.generateData()
         epcohs = 50
 
         loss_train = []
+
+        # --- Trainig ----- #
         for i,data in enumerate(iter(self.dl_train),0):
             X,y = data
-            pred = self.net.forward()
+            pred = self.net.forward(self.arch_str)
+            self.net.optimizer.zero_grad()
+            loss = F.cross_entropy(pred,y.type(torch.LongTensor))
+            loss.backward()
+            self.net.optimizer.step()
+            print(loss.data)
 
 
 
@@ -96,10 +101,5 @@ class Trainer():
 
 
 if test:
-    X, y = make_moons(n_samples=5,noise=0.2)
-
-    print(X)
-    print(y)
-    model = Net([20,'Sigmoid',100])
-    print(model.net)
-    print(model.forward(torch.from_numpy(X).type(torch.FloatTensor)))
+    train = Trainer(500,[])
+    train.train()
