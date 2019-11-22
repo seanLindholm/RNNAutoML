@@ -3,8 +3,19 @@ import torch
 from torch import nn, optim, utils
 import torch.nn.functional as F
 from torch.utils import data
+import matplotlib.pyplot as plt
 
-test = True
+test = False
+class Dataset(data.Dataset):
+    def __init__(self, X, y):
+        self.X = torch.Tensor(X)
+        self.y = torch.Tensor(y)
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        return self.X[idx], self.y[idx]
 
 class Net(nn.Module):
 
@@ -12,8 +23,11 @@ class Net(nn.Module):
         # Inherit from parent constructor
         super(Net, self).__init__()
         self.layers = []
+        self.datasize = 1000
+        self.epochs = 500
         self.in_features = 2
         self.out_classes = 2
+        
         self.act_dict = {
             'ReLU':nn.ReLU(),
             'Tanh':nn.Tanh(),
@@ -36,7 +50,7 @@ class Net(nn.Module):
                 
         # Last layer with output 2 representing the two classes
         self.layers.append(nn.Linear(num_input, self.out_classes))
-        self.layers.append(nn.Softmax(dim=0))
+        self.layers.append(nn.Softmax(dim=-1))
         self.net = nn.Sequential(*self.layers)
         #print('layers', layers)
         self.optimizer = optim.Adam(self.parameters(),lr=0.001)
@@ -44,26 +58,9 @@ class Net(nn.Module):
 
     def forward(self,x):
         return self.net(x)
-
-class Dataset(data.Dataset):
-    def __init__(self, X, y):
-        self.X = torch.Tensor(X)
-        self.y = torch.Tensor(y)
-
-    def __len__(self):
-        return len(self.X)
-
-    def __getitem__(self, idx):
-        return self.X[idx], self.y[idx]
-
-
-class Trainer():
-    def __init__(self,datasize,arch_str):
-        self.datasize = datasize
-        self.arch_str = arch_str
-        self.net = Net(arch_str)
-    def generateData(self,p_val = 0.2):
-        X, y = make_moons(n_samples=self.datasize,noise=0.2)
+    
+    def generateData(self,p_val = 0.6):
+        X, y = make_moons(n_samples=self.datasize,noise=0.1)
         val = int(len(X)*(1-p_val))
         set_train = Dataset(X[:val],y[:val])
         set_test = Dataset(X[val:],y[val:])
@@ -73,20 +70,62 @@ class Trainer():
 
     def train(self):
         self.generateData()
-        epcohs = 50
+        self.epoch_loss = []
+        self.epoch_acc = []
+        old_acc = 0
+        threshold = 0.01
+        max_iter = 0
+        for e in range(self.epochs): 
+            # --- Trainig ----- #
+            loss_e = 0
+            for i,data in enumerate(iter(self.dl_train),0):
+            
+                X,y = data
+                pred = self.net(X)
 
-        loss_train = []
+                self.optimizer.zero_grad()
+                loss = F.cross_entropy(pred,y.type(torch.LongTensor))
+                loss.backward()
+                self.optimizer.step()
+                loss_e += loss.data.numpy()
+                
+            self.epoch_loss.append((loss_e/(i+1)))
 
-        # --- Trainig ----- #
-        for i,data in enumerate(iter(self.dl_train),0):
-            X,y = data
-            pred = self.net.forward(self.arch_str)
-            self.net.optimizer.zero_grad()
-            loss = F.cross_entropy(pred,y.type(torch.LongTensor))
-            loss.backward()
-            self.net.optimizer.step()
-            print(loss.data)
+            # -- Testing -- #
+            acc = 0
+            for i,data in enumerate(iter(self.dl_test),0):    
+                X_test,y_test = data
+                pred = self.net(X_test)
+                pred = torch.argmax(pred,dim=-1)
+                acc += torch.mean(torch.eq(pred,y_test.type(torch.LongTensor)).type(torch.FloatTensor)).data.numpy()
+            
+            acc /= (i+1)
+            self.epoch_acc.append(acc) 
 
+            # -- Early stopping -- #
+
+            if abs(acc-old_acc) < threshold:
+                if max_iter == 10:
+                    self.epochs = e+1
+                    break
+                max_iter +=1
+            else:
+                max_iter = 0
+                old_acc = acc 
+        
+        # --- return acc after trainig --- #
+
+        return acc
+
+    def plot(self):
+        print(self.net)
+        plt.figure()
+        plt.title("loss over epochs")
+        plt.plot(range(self.epochs),self.epoch_loss)
+        plt.figure()
+        plt.title("acc of the archetecture over epochs")
+        plt.plot(range(self.epochs),self.epoch_acc)
+       
 
 
         #define train 80, val 20 and test 0 set from the data 
@@ -101,5 +140,21 @@ class Trainer():
 
 
 if test:
-    train = Trainer(500,[])
-    train.train()
+
+    net1 = Net([10,'ReLU',10, 'ReLU'])
+    net2 = Net([10])
+    net3 = Net([])
+    avrg = 10
+    acc1,acc2,acc3 = 0,0,0
+    print("Fitting the model..")
+    for _ in range(avrg):
+        acc1 += net1.train()  
+    print("accuracy from 1",(acc1/avrg))
+    for _ in range(avrg):
+        acc2 += net2.train()  
+    print("accuracy from 2",(acc2/avrg))
+    for _ in range(avrg):
+        acc3 += net3.train()  
+    print("accuracy from 1",(acc3/avrg))
+    
+   
