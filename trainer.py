@@ -19,7 +19,7 @@ class trainer():
             self.acc_his.append(acc)
             self.reward_his.append(controller.reward)
 
-            if (num_rollout+1) % (self.num_rollouts/10) == 0:
+            if (num_rollout+1) % (100) == 0:
                 print("{}/{}".format((num_rollout+1),self.num_rollouts))
             if (num_rollout+1) % self.num_rollouts == 0:
                 print("The last archtecture picked: \n",controller.actions)    

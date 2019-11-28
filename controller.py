@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from model import Net
 from torch.autograd import Variable
+import numpy as np
 
 test = False
 class Controller(nn.Module):
@@ -26,7 +27,7 @@ class Controller(nn.Module):
         self.GRU = nn.GRUCell(input_size=len(self.action_space),hidden_size = self.hidden_dim)
         self.fcl = nn.Linear(self.hidden_dim,len(self.action_space))
         self.optimizer = optim.Adam(self.parameters(),lr=0.001)
-
+        self.epsilon = 0.8
 
     def forward(self,x,h):
         x = x.unsqueeze(0)
@@ -41,9 +42,9 @@ class Controller(nn.Module):
 
     def step(self,state):
         logits,new_state = self.forward(torch.zeros(len(self.action_space)),state)
-        probs = F.softmax(logits,dim=-1)
+        self.probs = F.softmax(logits,dim=-1)
         log_probs = F.log_softmax(logits,dim=-1)
-        choice = probs.multinomial(num_samples=1).data
+        choice = self.probs.multinomial(num_samples=1).data
         action = self.action_space[int(choice)]
         act_log_prob = log_probs[choice]
     
@@ -55,6 +56,7 @@ class Controller(nn.Module):
         self.states = []
         self.actions = []
         self.log_probs = []
+        self.state_entropy = []
         self.reward=0
         state = torch.zeros(self.hidden_dim)
         self.states.append(state)
@@ -65,6 +67,8 @@ class Controller(nn.Module):
             if action == "term":
                 self.log_probs.append(log_prob)
                 self.states.append(state)
+                self.state_entropy.append(torch.mul(log_prob.sum(),self.probs.sum()))
+                
                 if len(self.actions) == 0:
                     self.reward -= 1
                 break               
@@ -72,6 +76,8 @@ class Controller(nn.Module):
             self.actions.append(action)
             self.log_probs.append(log_prob)
             self.states.append(state)
+
+            self.state_entropy.append(-torch.mul(log_prob.sum(),self.probs.sum()))
             depth+=1
 
             if len(self.actions) >= 2 and isinstance(self.actions[-2],str) and isinstance(self.actions[-1],str):
@@ -91,18 +97,22 @@ class Controller(nn.Module):
 
 
     def optimize(self):
-        self.log_probs = torch.cat(self.log_probs)
-           
-        R = torch.ones(1)*self.reward 
-        loss = -torch.mean(torch.mul(self.log_probs,R))
+        # self.log_probs = torch.cat(self.log_probs)
+        # self.state_entropy = torch.cat(self.state_entropy)
+        # loss = -torch.mean(torch.mul(self.log_probs,(R + (self.epsilon * self.state_entropy) )))
         
-        # for i in range(len(self.log_probs)):
-        #     loss -= self.log_probs[i]*Variable(R)
+        loss = 0
+        R = torch.ones(1)*self.reward 
+      
+        for i in range(len(self.log_probs)):
+             loss -= self.log_probs[i]*Variable(R)
+             loss -= self.epsilon*self.state_entropy[i] 
 
-        # loss /= len(self.log_probs)
-        # self.optimizer.zero_grad()
+        loss /= len(self.log_probs)
+        self.optimizer.zero_grad()
         loss.backward()    
         self.optimizer.step()
+        self.epsilon *= 0.96
         return loss.data
         
        
