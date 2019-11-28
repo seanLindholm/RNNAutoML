@@ -91,14 +91,16 @@ class Controller(nn.Module):
 
 
     def optimize(self):
-        #self.log_probs = torch.cat(self.log_probs)   
+        self.log_probs = torch.cat(self.log_probs)
+           
         R = torch.ones(1)*self.reward 
-        loss = 0
-        for i in range(len(self.log_probs)):
-            loss -= self.log_probs[i]*Variable(R)
+        loss = -torch.mean(torch.mul(self.log_probs,R))
+        
+        # for i in range(len(self.log_probs)):
+        #     loss -= self.log_probs[i]*Variable(R)
 
-        loss /= len(self.log_probs)
-        self.optimizer.zero_grad()
+        # loss /= len(self.log_probs)
+        # self.optimizer.zero_grad()
         loss.backward()    
         self.optimizer.step()
         return loss.data

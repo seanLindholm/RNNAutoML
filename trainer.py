@@ -12,6 +12,7 @@ class trainer():
 
     def trainController(self):
         controller = Controller()
+        print("Training controller")
         for num_rollout in (range(self.num_rollouts)):
             loss,acc = controller.generate_rollout() 
             self.loss_his.append(loss.numpy())
