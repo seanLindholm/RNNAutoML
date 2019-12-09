@@ -12,43 +12,54 @@ class Controller(nn.Module):
     def __init__(self):
         # Inherit from parent constructor
         super(Controller, self).__init__()
-        self.action_space = {
+        self.nodeSize = {
             0: "term",
             1: 2,
             2: 4,
             3: 8,
-            4: "ReLU",
-            5: "Sigmoid",
-            6: "Tanh",
+            4: 16,
+            5: 32,
+            6: 64
+        }
+        self.activations = {
+            0: "ReLU",
+            1: "Tanh",
+            2: "Sigmoid",
+            3: "LeakyReLU"
         }
         self.hidden_dim = 50
         self.max_depth = 12
         self.acc_tests = 5
-        self.GRU = nn.GRUCell(input_size=len(self.action_space),hidden_size = self.hidden_dim)
-        self.fcl = nn.Linear(self.hidden_dim,len(self.action_space))
-        self.optimizer = optim.Adam(self.parameters(),lr=0.001)
-        self.epsilon = 0.8
+        self.GRU = nn.GRUCell(input_size=len(self.hidden_dim),hidden_size = self.hidden_dim)
+        
+        self.decoder = []
+        for i in range(self.max_depth):
+            if i%2 == 0:
+                self.decoder.append(nn.Linear(self.hidden_dim,len(self.nodeSize)))
+            else:
+                self.decoder.append(nn.Linear(self.hidden_dim,len(self.activations)))
 
-    def forward(self,x,h):
+        
+        self.optimizer = optim.Adam(self.parameters(),lr=0.001)
+        self.epsilon = 1
+
+    def forward(self,x,h,depth):
         x = x.unsqueeze(0)
         h = h.unsqueeze(0)
-        
         h = self.GRU(x,h)
-        x = self.fcl(h)
+        x = self.decoder[depth](h)
         
 
         return x.squeeze(),h.squeeze() 
 
 
-    def step(self,state):
-        logits,new_state = self.forward(torch.zeros(len(self.action_space)),state)
+    def step(self,state,depth):
+        logits,new_state = self.forward(torch.zeros(len(self.hidden_dim)),state,depth)
         self.probs = F.softmax(logits,dim=-1)
         log_probs = F.log_softmax(logits,dim=-1)
         choice = self.probs.multinomial(num_samples=1).data
         action = self.action_space[int(choice)]
         act_log_prob = log_probs[choice]
-    
-        
         return action, act_log_prob ,new_state
 
     def generate_rollout(self):
@@ -62,16 +73,12 @@ class Controller(nn.Module):
         self.states.append(state)
         depth = 0
         while True and self.max_depth > depth:
-            action,log_prob,next_state = self.step(state)
+            action,log_prob,next_state = self.step(state,depth)
             state = next_state
             if action == "term":
                 self.log_probs.append(log_prob)
                 self.states.append(state)
-                self.state_entropy.append(torch.mul(log_prob.sum(),self.probs.sum()))
-                
-                if len(self.actions) == 0:
-                    self.reward -= 1
-                break               
+                self.state_entropy.append(torch.mul(log_prob.sum(),self.probs.sum()))            
             
             self.actions.append(action)
             self.log_probs.append(log_prob)
@@ -79,12 +86,6 @@ class Controller(nn.Module):
 
             self.state_entropy.append(-torch.mul(log_prob.sum(),self.probs.sum()))
             depth+=1
-
-            if len(self.actions) >= 2 and isinstance(self.actions[-2],str) and isinstance(self.actions[-1],str):
-                self.reward -=0.2
-            
-            elif len(self.actions) >= 2 and isinstance(self.actions[-2],int) and isinstance(self.actions[-1],int):
-                self.reward -=0.2
 
         net = Net(self.actions) 
         acc = 0
@@ -105,14 +106,14 @@ class Controller(nn.Module):
         R = torch.ones(1)*self.reward 
       
         for i in range(len(self.log_probs)):
-             loss -= self.log_probs[i]*Variable(R)
-             loss -= self.epsilon*self.state_entropy[i] 
+             loss -= self.log_probs[i]*Variable(R) - self.epsilon*self.state_entropy[i]
+             
 
         loss /= len(self.log_probs)
         self.optimizer.zero_grad()
         loss.backward()    
         self.optimizer.step()
-        self.epsilon *= 0.96
+        self.epsilon *= 0.99
         return loss.data
         
        
