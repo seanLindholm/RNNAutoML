@@ -25,12 +25,11 @@ class Controller(nn.Module):
             0: "ReLU",
             1: "Tanh",
             2: "Sigmoid",
-            3: "LeakyReLU"
         }
         self.hidden_dim = 50
         self.max_depth = 12
         self.acc_tests = 5
-        self.GRU = nn.GRUCell(input_size=len(self.hidden_dim),hidden_size = self.hidden_dim)
+        self.GRU = nn.GRUCell(input_size=self.hidden_dim,hidden_size = self.hidden_dim)
         
         self.decoder = []
         for i in range(self.max_depth):
@@ -54,12 +53,15 @@ class Controller(nn.Module):
 
 
     def step(self,state,depth):
-        logits,new_state = self.forward(torch.zeros(len(self.hidden_dim)),state,depth)
+        logits,new_state = self.forward(torch.zeros(self.hidden_dim),state,depth)
         self.probs = F.softmax(logits,dim=-1)
         log_probs = F.log_softmax(logits,dim=-1)
         choice = self.probs.multinomial(num_samples=1).data
-        action = self.action_space[int(choice)]
-        act_log_prob = log_probs[choice]
+        if depth %2 == 0:
+            action = self.nodeSize[int(choice)]
+        else:
+            action = self.activations[int(choice)]
+        act_log_prob = log_probs[int(choice)]
         return action, act_log_prob ,new_state
 
     def generate_rollout(self):
@@ -75,11 +77,13 @@ class Controller(nn.Module):
         while True and self.max_depth > depth:
             action,log_prob,next_state = self.step(state,depth)
             state = next_state
+          
             if action == "term":
                 self.log_probs.append(log_prob)
                 self.states.append(state)
                 self.state_entropy.append(torch.mul(log_prob.sum(),self.probs.sum()))            
-            
+                break
+
             self.actions.append(action)
             self.log_probs.append(log_prob)
             self.states.append(state)
