@@ -30,7 +30,7 @@ class Controller(nn.Module):
         self.hidden_dim = 50
         self.max_depth = 12
         self.acc_tests = 5
-        self.GRU = nn.GRUCell(input_size=len(self.hidden_dim),hidden_size = self.hidden_dim)
+        self.GRU = nn.GRUCell(input_size=self.hidden_dim,hidden_size = self.hidden_dim)
         
         self.decoder = []
         for i in range(self.max_depth):
@@ -54,7 +54,7 @@ class Controller(nn.Module):
 
 
     def step(self,state,depth):
-        logits,new_state = self.forward(torch.zeros(len(self.hidden_dim)),state,depth)
+        logits,new_state = self.forward(torch.zeros(self.hidden_dim),state,depth)
         self.probs = F.softmax(logits,dim=-1)
         log_probs = F.log_softmax(logits,dim=-1)
         choice = self.probs.multinomial(num_samples=1).data
