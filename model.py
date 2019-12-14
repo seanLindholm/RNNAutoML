@@ -39,6 +39,7 @@ class Net(nn.Module):
         
         # Break down string sent from Controller
         # and add layers in network based on this
+        
         for s in string:
             # If element in string is not a number (i.e. an activation function)
             try:
@@ -46,6 +47,7 @@ class Net(nn.Module):
                 self.layers.append(nn.Linear(num_input, s_int))
                 num_input = s_int
             except:
+               
                 self.layers.append(self.act_dict[s])
                 
         # Last layer with output 2 representing the two classes

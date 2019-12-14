@@ -25,7 +25,6 @@ class Controller(nn.Module):
             0: "ReLU",
             1: "Tanh",
             2: "Sigmoid",
-            3: "LeakyReLU"
         }
         self.hidden_dim = 50
         self.max_depth = 12
@@ -42,7 +41,7 @@ class Controller(nn.Module):
         
         self.optimizer = optim.Adam(self.parameters(),lr=0.001)
         self.epsilon = 1
-
+        self.baseline = 0.85
     def forward(self,x,h,depth):
         x = x.unsqueeze(0)
         h = h.unsqueeze(0)
@@ -58,8 +57,11 @@ class Controller(nn.Module):
         self.probs = F.softmax(logits,dim=-1)
         log_probs = F.log_softmax(logits,dim=-1)
         choice = self.probs.multinomial(num_samples=1).data
-        action = self.action_space[int(choice)]
-        act_log_prob = log_probs[choice]
+        if depth %2 == 0:
+            action = self.nodeSize[int(choice)]
+        else:
+            action = self.activations[int(choice)]
+        act_log_prob = log_probs[int(choice)]
         return action, act_log_prob ,new_state
 
     def generate_rollout(self):
@@ -75,11 +77,13 @@ class Controller(nn.Module):
         while True and self.max_depth > depth:
             action,log_prob,next_state = self.step(state,depth)
             state = next_state
+          
             if action == "term":
                 self.log_probs.append(log_prob)
                 self.states.append(state)
                 self.state_entropy.append(torch.mul(log_prob.sum(),self.probs.sum()))            
-            
+                break
+
             self.actions.append(action)
             self.log_probs.append(log_prob)
             self.states.append(state)
@@ -93,6 +97,11 @@ class Controller(nn.Module):
             acc += net.train()
         acc /= self.acc_tests
         self.reward += acc
+        
+        if self.reward > self.baseline:
+            self.baseline*=1.01
+
+        self.reward -= self.baseline    
         return self.optimize(),acc
        
 
